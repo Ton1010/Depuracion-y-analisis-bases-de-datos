@@ -1,0 +1,456 @@
+---
+title: "**IDENTIFICACIÓN EN LA CANTIDAD DE DELITOS SEXUALES COMETIDOS A HOMBRES Y MUJERES EN EL TERRITORIO NACIONAL**"
+author: "Antonio José Henao Villabon 2155087 Maria Camila Arismendi Joaqui 2155118"
+date: "Diciembre/2022"
+output: pdf_document
+fontsize: 12pt
+toc: TRUE
+lang: es-ES
+---
+\pagebreak
+
+```{r general, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(knitr)
+library(rmarkdown)
+library(ggplot2)
+library(readr)
+library(tidyverse)
+library(sf)
+library(lubridate)
+library(rgdal)
+library(terra)
+library(dplyr)
+library(magrittr)
+library(modelr)
+library(scales)
+base <- read_csv("base.csv")
+
+#Primera fase, depuraciOn de la base de datos principal
+base %<>% rename("CODIGO.DANE"="CODIGO DANE")
+base %<>% rename("ARMAS.MEDIOS"="ARMAS MEDIOS")
+
+base %<>% rename("GRUPO.ETARIO"="GRUPO ETARIO")
+base$GRUPO.ETARIO[base$GRUPO.ETARIO=="ADOLECENTES"]<-"ADOLESCENTES"
+
+base$GRUPO.ETARIO[base$GRUPO.ETARIO=="NO APLICA"]<-NA
+base$GRUPO.ETARIO[base$GRUPO.ETARIO=="NO REPORTA"]<-NA
+
+base$ARMAS.MEDIOS[base$ARMAS.MEDIOS=="-"]<-"NO REPORTADO"
+base$ARMAS.MEDIOS[base$ARMAS.MEDIOS=="ARMAS BLANCAS"]<-"ARMA BLANCA / CORTOPUNZANTE"
+base$ARMAS.MEDIOS[base$ARMAS.MEDIOS=="CORTANTES"]<-"ARMA BLANCA / CORTOPUNZANTE"
+base$ARMAS.MEDIOS[base$ARMAS.MEDIOS=="CORTOPUNZANTES"]<-"ARMA BLANCA / CORTOPUNZANTE"
+
+
+base$GENERO[base$GENERO=="NO APLICA"]<-NA
+base$GENERO[base$GENERO=="-"]<-NA
+base$GENERO[base$GENERO=="NO REPORTA"]<-NA
+
+base   %<>% na.omit(base)
+
+#Segunda fase: Creacion de nuevas bases de datos para el tratado de la informacion
+genero<-select(base, GENERO, CANTIDAD)
+genero %<>% count(GENERO, sort=TRUE)
+genero %<>% rename("CANTIDAD"="n")
+
+ARMAS <-select(base,ARMAS.MEDIOS,CANTIDAD)
+ARMAS %<>% count(ARMAS.MEDIOS, sort=TRUE)
+ARMAS %<>% rename("CANTIDAD"="n")
+ARMAS <- arrange(ARMAS, -CANTIDAD)
+
+delito <- select(base, delito, CANTIDAD)
+delito %<>% count(delito, sort=TRUE)
+
+
+date <-  as.Date(base$`FECHA HECHO`,'%d/%m/%Y')
+year<- as.numeric(format(date,'%Y'))
+year <- as.data.frame(year)
+year %<>% count(year, sort=TRUE)
+year <- arrange(year, year)
+
+
+grupo<-select(base, GRUPO.ETARIO, CANTIDAD)
+
+
+etario <- grupo %>% count(GRUPO.ETARIO, sort=TRUE)
+
+muni <- select(base,MUNICIPIO, CANTIDAD)
+muni %<>% count(MUNICIPIO,sort = TRUE)
+muni <- arrange(muni, -n)
+muni<-muni[1:5,]
+
+
+tipos_de_delito<-delito[1:5,]
+
+#Tercera fase: Depuracion de las nuevas bases de datos
+etario %<>% rename("CANTIDAD"="n")
+tipos_de_delito %<>% rename("DELITA"="delito")
+tipos_de_delito %<>% rename("CANTIDAD"="n")
+year %<>% rename("CANTIDAD"="n")
+
+etario$GRUPO.ETARIO[etario$GRUPO.ETARIO=="NO REPORTA"]<-NA
+genero$GENERO[genero$GENERO=="NO REPORTA"]<-NA
+
+
+
+
+tipos_de_delito$DELITA[tipos_de_delito$DELITA==
+                         "ARTÍCULO 210 A. ACOSO SEXUAL"]<-"ACOSO SEXUAL"
+tipos_de_delito$DELITA[tipos_de_delito$DELITA==
+                         "ARTÍCULO 209. ACTOS SEXUALES CON MENOR DE 14 AÑOS"]<-"ACTOS SEXUALES CON MENOR DE 14 AÑOS"
+tipos_de_delito$DELITA[tipos_de_delito$DELITA==
+                         "ARTÍCULO 208. ACCESO CARNAL ABUSIVO CON MENOR DE 14 AÑOS"]<-"ACCESO CARNAL ABUSIVO CON MENOR DE 14 AÑOS"
+tipos_de_delito$DELITA[tipos_de_delito$DELITA==
+                         "ARTÍCULO 205. ACCESO CARNAL VIOLENTO"]<-"ACCESO CARNAL VIOLENTO"
+tipos_de_delito$DELITA[tipos_de_delito$DELITA==
+                         "ARTÍCULO 206. ACTO SEXUAL VIOLENTO"]<-"ACTO SEXUAL VIOLENTO"
+
+
+# DATOS PARA GRAFICA de pastel sobre genero
+plotdata <- genero %>%
+  arrange(desc(GENERO)) %>%
+  mutate(prop = round(CANTIDAD * 100 / sum(CANTIDAD), 1),
+         lab.ypos = cumsum(prop) - 0.5  *prop)
+
+# DATOS PARA GRAFICA de pastel sobre municipio
+
+plotdata1 <- muni %>%
+  arrange(desc(MUNICIPIO)) %>%
+  mutate(prop = round(n * 100 / sum(n), 1),
+         lab.ypos = cumsum(prop) - 0.5  *prop)
+
+#Cuarta fase: Elaboracion de las graficas
+
+#GRAFICO DE BARRA GRUPO ETARIO
+options(scipen=9)
+ggplot(etario, aes(x = GRUPO.ETARIO, y=CANTIDAD, fill=GRUPO.ETARIO)) +
+  geom_bar(stat = "identity", color="black") + 
+  scale_fill_manual(values=c("#b4edd2","#a0cfd3","#8d94ba","#9a7aa0","#87677b")) +
+  labs(x = "Grupo", 
+       y = "Cantidad",
+       fill= "Grupo Etario",
+       title = "Cantidad de Reportes por Grupo Etario",
+       caption = "FUENTE: DIJIN - Policia Nacional. Reporte Delitos sexuales Policia Nacional - 2022 \n Grafica 2") + 
+  theme(plot.title=element_text(size=18, face="bold"),
+        legend.position = "none")+ylim(0,150000) 
+
+
+#GRAFICO DE TORTA PARA GENERO
+ggplot(plotdata, 
+       aes(x = "", 
+           y = prop, 
+           fill = GENERO,
+           color="white")) +
+  geom_bar(width = 5, 
+           stat = "identity", 
+           color = "black") +
+  geom_text(aes(label=percent(prop/100)),
+            position=position_stack(vjust=0.55),color="black",size=4)+
+  
+  scale_fill_manual(values=c("#9A7AA0","#A0CFD3")) +
+  coord_polar("y", 
+              start = 0, 
+              direction = -1) + theme_void() +
+  labs(y=NULL,
+       x=NULL,
+       title = "Porcentaje de Delitos \n Sexuales por Genero",caption = "FUENTE: DIJIN - Policia Nacional. Reporte Delitos sexuales Policia Nacional - 2022 \n Grafica 1") + 
+  theme(plot.title=element_text(size=18, face='bold',hjust=0.5),plot.caption.position = "plot",
+        plot.caption = element_text(hjust = 1))
+
+# GRAFICA DE TIPOS DE DELITOS
+ggplot(tipos_de_delito, aes(x = reorder(DELITA,+CANTIDAD), y=CANTIDAD, fill=DELITA)) +
+  geom_bar(stat = "identity", color="black") + 
+  scale_fill_manual(values=c("#b4edd2","#a0cfd3","#8d94ba","#9a7aa0","#87677b")) +
+  labs(x = "Tipo de Delito cometido", 
+       y = "Frecuencia de delitos cometidos",
+       fill= "Tipo de Delito",
+       title = "Delitos Mas Repetidos",
+       caption = "FUENTE: DIJIN - Policia Nacional. Reporte Delitos sexuales Policia Nacional - 2022 \n Grafica 3") + 
+  theme(plot.title=element_text(face='bold'),
+        legend.position = "none",
+        axis.title.x =element_text(size=11),
+        axis.title.y = element_text(size=11))+ coord_flip() 
+
+#GRAFICA ARMAS
+
+ggplot(ARMAS, aes(x = reorder(ARMAS.MEDIOS,-CANTIDAD), y=CANTIDAD, fill=ARMAS.MEDIOS)) +
+  geom_bar(stat = "identity", color="black") + 
+  scale_fill_manual(values=c("#b4edd2","#aaded3","#a0cfd3","#97b2c7","#8d94ba","#9487ad","#9a7aa0","#91718e","#87677b")) +
+  labs(x = "Tipo de Arma Utilizada", 
+       y = "Frecuencia de uso",
+       fill= "Tipo de Arma",
+       title = "Cantidad de Armas Empleadas",
+       caption = "FUENTE: DIJIN - Policia Nacional. Reporte Delitos sexuales Policia Nacional - 2022\n Grafica 6") + 
+  theme(plot.title=element_text(face='bold'),
+        legend.position = "none",
+        axis.title.x =element_text(size=11),
+        axis.title.y = element_text(size=11),
+        axis.text.x=element_text(angle=45, hjust=0.9))+ ylim(0,150000)
+
+#GRAFICA AÑOS
+
+ggplot(year, aes(x = year, y = CANTIDAD)) +
+  geom_line(color='#87677b') +
+  labs(title = "Cantidad de Delitos Sexuales Respecto al Tiempo",
+       x = "Año",
+       y = "Cantidad",
+       caption = "FUENTE: DIJIN - Policia Nacional. Reporte Delitos sexuales Policia Nacional - 2022\n Grafica 7") + 
+  theme(plot.title=element_text(size=18, face='bold',hjust=0.5),  plot.margin = margin(t = 20,
+                                                                                       r = 40,
+                                                                                       b = 40,
+                                                                                       l = 15)) + 
+  coord_cartesian(xlim = c(2010, 2022), expand = FALSE)+ ylim(0,40000) 
+
+
+#GRAFICA MUNICIPIO
+plotdata1 <- muni %>%
+  arrange(desc(MUNICIPIO)) %>%
+  mutate(prop = round(n * 100 / sum(n), 1),
+         lab.ypos = cumsum(prop) - 0.5  *prop)
+
+ggplot(plotdata1, 
+       aes(x = "", 
+           y = prop, 
+           fill = MUNICIPIO,
+           color="white")) +
+  geom_bar(width = 5, 
+           stat = "identity", 
+           color = "black") +
+  geom_text(aes(label=percent(prop/100)),
+            position=position_stack(vjust=0.5),color="black",size=3)+
+  coord_polar("y", 
+              start = 0, 
+              direction = -1) + theme_void() +
+  labs(y=NULL,
+       x=NULL,
+       title = "Porcentaje de Delitos \n Sexuales por Municipio",caption = "FUENTE: DIJIN - Policia Nacional. Reporte Delitos sexuales Policia Nacional - 2022\n Grafica 5") + 
+  theme(plot.title=element_text(size=18, face='bold',hjust=0.5),plot.caption.position = "plot",
+        plot.caption = element_text(hjust = 1)) + scale_fill_manual(values=c("#b4edd2","#a0cfd3","#8d94ba","#9a7aa0","#87677b"))
+```
+
+
+## *Objetivos*
+
+
+### *Objetivo General*
+
+
+#### - Identificar la cantidad de delitos sexuales cometidos en contra del sexo femenino y masculino en el territorio nacional
+\
+\
+En el transcurso de tiempo registrado en la base de datos, desde inicios de 2010 hasta septiembre de 2022, tras la depuración de la base de datos, se pudo obtener que se han realizado más de 260.000 reportes sobre delitos sexuales que han sufrido personas, tanto de sexo femenino como de sexo masculino.
+
+Sin embargo, se pudo identificar como la mayoría de estos hechos son mayormente reportados por mujeres, contando con 231.219 denuncias, frente a 38.316 reportes realizados por hombres, con una diferencia de 192.903 casos. 
+Esto permite concluir, que factores sociales, como las violencias basadas en género, influyen de forma importante en la violencia sexual; si bien las personas de sexo femenino se encuentran en mayor estado de vulnerabilidad ante los delitos sexuales, el sexo masculino se encuentra en desigualdad al momento de denunciar este tipo de violencias, explicando en cierta medida la baja tasa de reportes por parte de este género.
+
+
+### *Objetivos espeficicos*
+#### - Especificar cual es el género con más índice de violencia sexual.
+\
+\
+Con base en los datos obtenidos posterior al tratamiento de la base de datos, se pudo especificar cuál género, masculino o femenino, cuenta con un mayor índice de violencia sexual. De esta manera, se puede concluir como el 86% de reportes sobre delitos sexuales desde enero de 2010 hasta septiembre de 2022, han sido realizados por víctimas de sexo femenino, dejando un 14% de las denuncias efectuadas al sexo masculino, dejando en evidencia como las mujeres son más susceptibles a vivir violencia sexual de cualquier índole.
+
+Este resultado permite concluir que, este alto porcentaje de los reportes por parte de las mujeres se puede atribuir a las violencias basadas en género, en las cuales, se toma a las personas de sexo femenino más débiles, volviéndolas un blanco fácil para la violencia sexual en contra de ellas.
+
+Igualmente, el bajo índice de reportes por parte del sexo masculino se puede atribuir a la cultura y educación colombiana, en donde, se hace burla a aquellos hombres que son violentados sexualmente, justificando la omisión por realizar este tipo de denuncias, explicando una posible causa de este bajo número de reportes oficiales sobre delitos sexuales.
+
+
+#### - Mostrar cuales son las zonas del país con mayores casos reportados por delitos sexuales.
+\
+\
+Tras el análisis de la base de datos “Reporte Delitos sexuales Policía Nacional”, se pudo mostrar de forma visual mediante un mapa de calor, en cuales departamentos de Colombia se han reportado más casos de delitos sexuales en contra de las personas. Dejando como resultado que en Cundinamarca se ha reporta el 19% de los delitos reportados a nivel nacional, seguido por Antioquia con un 12% y Valle del Cauca con el 10% del registro nacional.
+
+Con base en esos resultados, se aprecia como en el centro y occidente del país hay una mayor presencia de delitos sexuales, que se deben probablemente a una mayor población encontrada en los departamentos de Cundinamarca, Antioquia y Valle del Cauca, dejando paso a una mayor cantidad de posibles víctimas.
+
+
+#### - Determinar cuál es el grupo etario más afectado por delitos sexuales.
+\
+\
+Gracias a los datos suministrados por la DIJIN-Policia Nacional se ha podido tener información de como el grupo etario de menores de edad es el más afectado en delitos sexuales, teniendo una cifra de más de 100.000 menores afectados registrados, cifras totalmente significativas que muestran como este grupo es el más vulnerable, seguido por los adultos y finalmente los adolescentes como grupo etario menos afectado.
+
+Con base a lo obtenido, se puede concluir que los menores son el grupo más vulnerados debido a su condición vulnerable al ser actores sociales más indefensos e “inferiores” a comparación de un adulto, los cuales cuentan con una tasa menor de reportes de violencia sexual.
+
+
+#### - Exponer los diferentes tipos de delitos sexuales que fueron cometidos.
+\
+\
+Tras determinar cuáles son los 5 delitos de mayor ocurrencia en Colombia, se pudo determinar como los delitos en contra de los menores de 14 años encabezan el listado, seguido por los delitos relacionados al acceso carnal y acto sexual. Sin embargo, otro delito muy presente en los resultados de este análisis es el acoso sexual, pero con una menor frecuencia de reporte a comparación de los anteriormente mencionados.
+
+Al obtener estos resultados, se corrobora como los menores, lamentablemente, son aquellos con mayor reporte de violencia sexual. Además, frente a los resultados obtenidos, se evidencia como el contexto histórico social de Colombia ha sido promotor del acoso sexual, que puede reflejarse inclusive en la calle, justificando así la normalización de este, evitando así un mayor número de reportes de este tipo de delito sexual por parte de las personas que lo lleguen a padecer.
+\
+\
+
+## *Analisis de las variables por medio de graficos descriptivos*
+
+
+### *Porcentaje de delitos sexuales por genero*
+
+
+```{r Torta par genero, echo=FALSE, fig.height=3, fig.width=6}
+#GRAFICO DE TORTA PARA GENERO
+ggplot(plotdata, 
+       aes(x = "", 
+           y = prop, 
+           fill = GENERO,
+           color="white")) +
+  geom_bar(width = 5, 
+           stat = "identity", 
+           color = "black") +
+  geom_text(aes(label=percent(prop/100)),
+            position=position_stack(vjust=0.55),color="black",size=4)+
+  
+  scale_fill_manual(values=c("#9A7AA0","#A0CFD3")) +
+  coord_polar("y", 
+              start = 0, 
+              direction = -1) + theme_void() +
+  labs(y=NULL,
+       x=NULL,
+       title = "Porcentaje de Delitos \n Sexuales por Genero",caption = "FUENTE: DIJIN - Policia Nacional. Reporte Delitos sexuales Policia Nacional - 2022 \n Grafica 1") + 
+  theme(plot.title=element_text(size=18, face='bold',hjust=0.5),plot.caption.position = "plot",
+        plot.caption = element_text(hjust = 1))
+```
+
+
+Al realizar el gráfico circular para la variable relacionada con el género de las personas víctimas de delitos sexuales, como se esperaba, el mayor género violentado de forma sexual es el femenino, pues se obtuvo que el 86% de las víctimas son de este sexo, frente al 14% de la muestra que pertenece al género masculino.
+
+
+### *Cantidad de reportes por grupo etario*
+
+
+```{r grafica grupo etario, echo=FALSE, fig.height=3, fig.width=6}
+#GRAFICO DE BARRA GRUPO ETARIO
+options(scipen=9)
+ggplot(etario, aes(x = GRUPO.ETARIO, y=CANTIDAD, fill=GRUPO.ETARIO)) +
+  geom_bar(stat = "identity", color="black") + 
+  scale_fill_manual(values=c("#b4edd2","#a0cfd3","#8d94ba","#9a7aa0","#87677b")) +
+  labs(x = "Grupo", 
+       y = "Cantidad",
+       fill= "Grupo Etario",
+       title = "Cantidad de Reportes por Grupo Etario",
+       caption = "FUENTE: DIJIN - Policia Nacional. Reporte Delitos sexuales Policia Nacional - 2022 \n Grafica 2") + 
+  theme(plot.title=element_text(size=18, face="bold"),
+        legend.position = "none")
+```
+
+
+Gracias a las variables cantidad y el grupo etario se ha podido realizar un gráfico de barras sobre los reportes por grupo etario, gracia a ellos se puede concluir que, los/las menores de edad son los más afectados por estos tipos de delitos en el territorio nacional, seguido del grupo etario de los adultos y finalmente los adolescentes son los menos afectados por este tipo de delitos.
+
+
+### *Delitos mas repetidos*
+
+
+```{r delitos mas repetidos, echo=FALSE, fig.height=3, fig.width=6}
+ggplot(tipos_de_delito, aes(x = reorder(DELITA,+CANTIDAD), y=CANTIDAD, fill=DELITA)) +
+  geom_bar(stat = "identity", color="black") + 
+  scale_fill_manual(values=c("#b4edd2","#a0cfd3","#8d94ba","#9a7aa0","#87677b")) +
+  labs(x = "Tipo de Delito cometido", 
+       y = "Frecuencia de delitos cometidos",
+       fill= "Tipo de Delito",
+       title = "Delitos Mas Repetidos",
+       caption = "FUENTE: DIJIN - Policia Nacional. Reporte Delitos sexuales Policia Nacional - 2022\n Grafica 3") + 
+  theme(plot.title=element_text(face='bold'),
+        legend.position = "none",
+        axis.title.x =element_text(size=11),
+        axis.title.y = element_text(size=11)) + coord_flip() 
+```
+
+
+El resultado obtenido al realizar el gráfico de barras horizontales de la variable de delitos con una mayor frecuencia, indica que los dos tipos de delitos más reportados son del tipo de acto sexual y acceso carnal con menores de 14 años. También se observa como el acceso carnal y acto sexual violento también hacen parte de la lista de 5 delitos más denunciados. Finalmente se tiene como el acoso sexual, en una baja frecuencia, también es un tipo de delito sexual que más afecta a la población.
+
+
+### *Cantida de casos de delito sexual por departamento*
+
+
+![Mapa](mapa.png){fig.height=1, fig.width=2}
+\
+\
+Gracias al presente grafico se puede concluir como la mayoria de casos son cometidos cerca al centro del territorio nacional, teniendo como protagonista principal al departamento de Cundinamarca con un 19% de la cifra tota, seguido por los departamentos de Antioquia y Valle del cauca con un 12% y 10% respectivamente de la cifra total de casos cometidos en el territorio nacional.
+
+
+### *Porcentaje de delitos sexuales por municipio*
+
+
+```{r municipios, echo=FALSE}
+#GRAFICA MUNICIPIO
+plotdata1 <- muni %>%
+  arrange(desc(MUNICIPIO)) %>%
+  mutate(prop = round(n * 100 / sum(n), 1),
+         lab.ypos = cumsum(prop) - 0.5  *prop)
+
+ggplot(plotdata1, 
+       aes(x = "", 
+           y = prop, 
+           fill = MUNICIPIO,
+           color="white")) +
+  geom_bar(width = 5, 
+           stat = "identity", 
+           color = "black") +
+  geom_text(aes(label=percent(prop/100)),
+            position=position_stack(vjust=0.5),color="black",size=3)+
+  coord_polar("y", 
+              start = 0, 
+              direction = -1) + theme_void() +
+  labs(y=NULL,
+       x=NULL,
+       title = "Porcentaje de Delitos \n Sexuales por Municipio",caption = "FUENTE: DIJIN - Policia Nacional. Reporte Delitos sexuales Policia Nacional - 2022\n Grafica 5") + 
+  theme(plot.title=element_text(size=18, face='bold',hjust=0.5),plot.caption.position = "plot",
+        plot.caption = element_text(hjust = 1)) + scale_fill_manual(values=c("#b4edd2","#a0cfd3","#8d94ba","#9a7aa0","#87677b"))
+
+```
+\
+\
+Gracias al gráfico de pastel realizado para la variable MUNICIPIO de la base de datos, se pudo esclarecer cuales son los 5 municipios a nivel nacional con un mayor número de reportes por delitos sexuales cometidos en contra de las personas. De esta manera, se determina como Bogotá D.C, es quien encabeza este listado, abarcando un 47.5% de reportes totales en todo el país, seguido con una alta proporción por Medellín, con un 18,8% y Cali con 18,4% respecto al total nacional, mientras que Barranquilla y Bucaramanga tienen una menor cantidad de delitos denunciados a comparación con los municipios anteriormente mencionados.
+\
+Al obtener estos resultados, se puede evidenciar como los principales municipios, basado en la cantidad de reportes por delitos sexuales, son ciudades capitales; Bogotá como la capital de Colombia, Medellín como la capital de Antioquia, Cali la capital del Valle del Cauca, Barranquilla capital del departamento Atlántico, y finalmente Bucaramanga capital del departamento de Santander.
+
+
+### *Cantidad de armas empleadas*
+
+
+```{r armas, echo=FALSE}
+
+#GRAFICA ARMAS
+ggplot(ARMAS, aes(x = reorder(ARMAS.MEDIOS,-CANTIDAD), y=CANTIDAD, fill=ARMAS.MEDIOS)) +
+  geom_bar(stat = "identity", color="black") + 
+  scale_fill_manual(values=c("#b4edd2","#aaded3","#a0cfd3","#97b2c7","#8d94ba","#9487ad","#9a7aa0","#91718e","#87677b")) +
+  labs(x = "Tipo de Arma Utilizada", 
+       y = "Frecuencia de uso",
+       fill= "Tipo de Arma",
+       title = "Cantidad de Armas Empleadas",
+       caption = "FUENTE: DIJIN - Policia Nacional. Reporte Delitos sexuales Policia Nacional - 2022\n Grafica 6") + 
+  theme(plot.title=element_text(face='bold'),
+        legend.position = "none",
+        axis.title.x =element_text(size=11),
+        axis.title.y = element_text(size=11),
+        axis.text.x=element_text(angle=45, hjust=0.9))
+
+```
+
+
+Mediante el grafico 6 se puede notar como los delitos sexuales se llevan a cabo en su mayoría sin empleo de armas, teniendo relación con lo que se ha mencionado anteriormente, las menores de 14 años al ser las mayor afectadas tienen un alto grado de relación al no necesitar algún tipo de arma en especial para ser victimas de estas clases de delitos, siguiente se tiene que mas de 50.000 delitos no reportan un arma, teniendo un poco de sesgo en los reportes de estos delitos, pudiendo comentar como la Dijin-Policia Nacional, la cual es la fuente en esta investigación, no lleva a cabo una ardua tarea en determinar el arma con que se llevan a cabo estos delitos, cabe menciona que las cintas y esposas son las armas menos usada por los delincuentes.
+
+
+### *Cantidad de delitos sexuales respecto al tiempo*
+
+
+```{r delitos respecto al tiempo, echo=FALSE, fig.height=3, fig.width=6}
+#GRAFICA AÑOS
+
+ggplot(year, aes(x = year, y = CANTIDAD)) +
+  geom_line(color='#87677b') +
+  labs(title = "Cantidad de Delitos Sexuales Respecto al Tiempo",
+       x = "Año",
+       y = "Cantidad",
+       caption = "FUENTE: DIJIN - Policia Nacional. Reporte Delitos sexuales Policia Nacional - 2022\n Grafica 7") + 
+  theme(plot.title=element_text(size=18, face='bold',hjust=0.5))
+
+```
+
+
+Tras la elaboración del gráfico de línea sobre la cantidad de delitos sexuales vs el tiempo, en años, se puede notar una tendencia creciente de la cantidad de hechos desde el año 2010 hasta inicios de 2019, desde entonces, se ha visto en decadencia el número de reportes por delitos sexuales hasta el año en curso.
+
+
+
+
+
+
+
