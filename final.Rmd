@@ -1,6 +1,6 @@
 ---
 title: "**IDENTIFICACIÓN EN LA CANTIDAD DE DELITOS SEXUALES COMETIDOS A HOMBRES Y MUJERES EN EL TERRITORIO NACIONAL**"
-author: "Antonio José Henao Villabon 2155087 Maria Camila Arismendi Joaqui 2155118"
+author: "Antonio Henao Maria Arismendi "
 date: "Diciembre/2022"
 output: pdf_document
 fontsize: 12pt
